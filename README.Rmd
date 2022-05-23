@@ -5,7 +5,7 @@ output: github_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-pacman::p_load(tidyverse, haven, cNORM,gamlss,gamlss.dist,labelled)
+pacman::p_load(tidyverse, haven, cNORM,gamlss,gamlss.dist,labelled,knitr)
 ```
 
 
@@ -72,7 +72,7 @@ yr %>% ggplot(aes(x=Age)) + geom_histogram(color="black", fill="lightblue", binw
   theme_bw() + scale_x_continuous(breaks = seq(6,13,1))
 ```
 
-
+## Arrows
 
 ### Elaboración del modelo:
 
@@ -87,6 +87,14 @@ yr = yr %>% mutate(GradeF = factor(Grade,levels = c("Kinder","1st Grade",
 yr$GradeG = as.numeric(yr$GradeF)
 ```
 
+
+```{r}
+yr %>% ggplot(aes(x=Arrows_Total_Score)) + geom_histogram(color="black",fill="lightblue",binwidth = 1) +
+  theme_bw() + facet_wrap(~GradeG, scale="free",ncol = 2) +
+  scale_x_continuous(breaks = seq(-10,36,2))
+```
+
+
 Modelo: puntaje bruto como función del percentil y el grupo de edad. Aquello permite la construcción de un plano con el que podemos luego generar las normas.
 
 ```{r}
@@ -94,10 +102,10 @@ resultados = cnorm(raw = yr$Arrows_Total_Score,group = yr$GradeG)
 ```
 
 
+
 Lo que está diciendo es que existe una función que permite estimar con una alta presición el puntaje bruto de una persona si es que conocemos su localización (en percentil) y su grupo de pertenencia.
 
 Podemos utilizar los términos de la función para estimar los puntajes observados a partir de los percentiles y el grupo de pertenencia, y el error promedio será de 1.18644 puntos.
-
 
 
 ```{r}
@@ -108,5 +116,96 @@ A = 2
   7.295796909*A + -0.01763273653*L*A^2 + 0.00001574*L^2*A^3
 ```
 
+## Chequeo del modelo:
 
-.
+
+```{r}
+checkConsistency(resultados)
+```
+
+```{r}
+plotRaw(resultados)
+```
+
+
+
+
+## Tablas:
+
+
+```{r message=FALSE, warning=FALSE}
+cursos = c("k","1ro","2do","3ro","4to","5to","6to")
+
+for(i in 1:7){
+  assign(str_c("arrows_",cursos[i],"_T"), rawTable(i,resultados, minRaw = -10,maxRaw = 36))
+}
+```
+
+
+
+```{r}
+arrows_k_T %>% knitr::kable(row.names = F)
+```
+
+
+```{r}
+arrows_1ro_T %>% knitr::kable(row.names = F)
+```
+
+
+```{r}
+arrows_3ro_T %>% knitr::kable(row.names = F)
+```
+
+
+```{r}
+arrows_6to_T %>% knitr::kable(row.names = F)
+```
+
+
+# Comparación de normas con método tradicional:
+
+La forma tradicional de generar normas considera que cada grupo (ej. edad) es una muestra distinta a la otra, de modo que no hay cruce de información. El problema de este método es que es ciego a la relación que existe entre la variable que representa al grupo, y los puntajes que se buscan normar.
+
+
+```{r}
+arrow_norm_empirica = cNORM::rankByGroup(data=yr, raw = "Arrows_Total_Score", group = "GradeG")
+```
+
+
+
+```{r}
+arrow_norm_empirica %>% dplyr::select(GradeG,raw,percentile) %>% 
+  ggplot(aes(x=raw,y=percentile,color=factor(GradeG))) + geom_point() +
+  geom_line() + theme_bw() +
+  theme(legend.position = "bottom") +
+  scale_x_continuous(breaks = seq(0,36,2))
+```
+
+
+
+```{r}
+model_norms = data.frame()
+for(i in 1:7){
+ raw =  c(0:36)
+ percentil = pnorm(cNORM::predictNorm(raw = seq(0,36), A = i, model = resultados),50,10)
+ dat = data.frame(cbind(i,raw, percentil))
+ model_norms = bind_rows(model_norms,dat)
+}
+```
+
+En contraste con el método anterior, el método de norma propuesto permite utilizar la información de la variable del grupo como variable explicativa, moestrando lo que teória y empíricamente debiese ocurrir. Para ello, el modelo estadístico permite vincular puntajes brutos, percentiles y la variable explicativa en un todo coherente.
+
+
+```{r}
+model_norms %>% ggplot(aes(x=raw, y=percentil, color = factor(i))) +
+  geom_point() + geom_line() + theme_bw() +
+  theme(legend.position = "bottom") + labs(color="Grupo") +
+  scale_x_continuous(breaks = seq(0,36,2))
+```
+
+
+
+
+
+
